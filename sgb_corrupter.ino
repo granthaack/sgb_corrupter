@@ -1,4 +1,4 @@
-//Define stuff for Arduino register voodoo magic
+//Define stuff for Arduino register functions
 #define CLR(x,y) (x&=(~(1<<y)))
 #define SET(x,y) (x|=(1<<y))
 
@@ -27,6 +27,14 @@
 //Pin connected to Cartridge Address Corruption Status LED
 #define cart_addr_led 5
 
+//Pin connected to the analog output pin of the VRAM Address Corruption Potentiometer
+#define vram_addr_pot 0
+//Pin connected to the analog output pin of the VRAM Data Corruption Potentiometer
+#define vram_data_pot 1
+
+//Define how long in milleseconds to wait between WRAM and Cart corruptions
+#define wram_cart_corrupt_delay 15
+
 void setup() {
   //Set shift register output pins
   pinMode(latch_pin, OUTPUT);
@@ -49,139 +57,44 @@ void setup() {
 }
 
 void loop() {
-  corrupt_vram(analogRead(0), analogRead(1));
+  corrupt_vram(analogRead(vram_addr_pot), analogRead(vram_data_pot));
   corrupt_cart_wram(digitalRead(wram_data_button), digitalRead(wram_addr_button), digitalRead(cart_data_button), digitalRead(cart_addr_button));
-  /*
-  if(digitalRead(wram_data_button) == HIGH){
-    digitalWrite(wram_data_led, HIGH);
-    delay(1000);
-    digitalWrite(wram_data_led, LOW);
-    //Serial.println("wram data pressed");
-  }
-  if(digitalRead(wram_addr_button) == HIGH){
-    digitalWrite(wram_addr_led, HIGH);
-    delay(1000);
-    digitalWrite(wram_addr_led, LOW);
-    //Serial.println("wram addr pressed");
-  }
-  if(digitalRead(cart_data_button) == HIGH){
-    digitalWrite(cart_data_led, HIGH);
-    delay(1000);
-    digitalWrite(cart_data_led, LOW);
-    //Serial.println("cart data pressed");
-  }
-  if(digitalRead(cart_addr_button) == HIGH){
-    digitalWrite(cart_addr_led, HIGH);
-    delay(1000);
-    digitalWrite(cart_addr_led, LOW);
-    //Serial.println("cart addr pressed");
-  }
-  /*
-  if(digitalRead(5) == LOW){
-    Serial.println("4 pressed");
-  }
-  /*
-  randShift = random(8);
-  switch (randShift){
-    case 0:
-      shiftByte = 0;
-      break;
-    //case 1:
-      //shiftByte = 1;
-      //break;
-    case 2:
-      shiftByte = 2;
-      break;
-    case 3:
-      shiftByte = 4;
-      break;
-    case 4:
-      shiftByte = 8;
-      break;
-    case 5:
-      shiftByte = 16;
-      break;
-    case 6:
-      shiftByte = 32;
-      break;
-    case 7:
-      shiftByte = 64;
-      break;
-    case 8:
-      shiftByte = 128;
-      break;
-  }
-  digitalWrite(latchPin, LOW);
-  // shift out the bits:
-  shiftOut(dataPin, clockPin, LSBFIRST, 0);  
-  digitalWrite(latchPin, HIGH);
-  // pause before next value:
-  Serial.print(analogRead(0));
-  Serial.print(" ");
-  Serial.print(analogRead(1));
-  Serial.print(" ");
-  Serial.println();
-  /*
-  //Corrupt arduino digpin 0, sram A0
-  SET(PORTB, 0);  
-  __asm__("nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t");
-  CLR(PORTB, 0);
-  
-  //Corrupt arduino digpin 1, sram D0
-  SET(PORTD, 0);  
-  __asm__("nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t");
-  CLR(PORTD, 0);
-  
-  //Corrupt arduino digpin 2, vram A0
-  SET(PORTD, 0);  
-  __asm__("nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t");
-  CLR(PORTD, 0);
-  
-  //Corrupt arduino digpin 3, vram D0
-  SET(PORTD, 0);  
-  __asm__("nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t");
-  CLR(PORTD, 0);
-  
-  //Corrupt arduino digpin 4, cart A0
-  SET(PORTD, 0);  
-  __asm__("nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t");
-  CLR(PORTD, 0);
-  
-  //Corrupt arduino digpin 5, cart D0
-  SET(PORTD, 0);  
-  __asm__("nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t");
-  CLR(PORTD, 0);
-  delayMicroseconds(10000);
-  */
 }
 
+//Communicate with the shift registers to pull the various VRAM bus lines low
 void corrupt_vram(int addr_pot, int data_pot){
-  int addr_shift = ((((addr_pot*255)/1000)));
-  int data_shift = ((((data_pot*255)/1000)));
-  //Serial.println(addr_shift);
-  //Serial.println(data_shift);
-  //int rand_addr = 255 >> addr_shift;
-  //int rand_data = 255 >> data_shift;
-  int rand_addr = addr_shift;
-  int rand_data = data_shift;
+  
+  //Read the data from the address and data potentiometers and convert the reading to a number between 0 and 127. 
+  //When this byte is written to the shift registers, it will pull the corresponding VRAM bus lines to low.
+  int rand_addr = (addr_pot/8);
+  int rand_data = (data_pot/8);
+  
+  //Bitmask the byte to be sent to the shift registers and prevent the 4th bit from being set high. When this 
+  //bit is set to high it generates a bunch of parallel lines on the SGB screen that just persist and break the game.
   rand_data = rand_data&0b11110111;
   rand_addr = rand_addr&0b11110111;
+  
+  //Write the byte out to the shift registers
   digitalWrite(latch_pin, LOW);
+  Serial.println(rand_addr);
   shiftOut(data_pin, clock_pin, LSBFIRST, rand_addr);  
-  digitalWrite(latch_pin, HIGH);
-  digitalWrite(latch_pin, LOW);
+  //digitalWrite(latch_pin, HIGH);
+  //digitalWrite(latch_pin, LOW);
+  Serial.println(rand_data);
   shiftOut(data_pin, clock_pin, LSBFIRST, rand_data);  
   digitalWrite(latch_pin, HIGH);
-  delay(10);
 }
 
+//Scan through the various button inputs on the corrupter and see if any of them are being pressed. This would be much 
+//better served with an interrupt but I ran out of interruptable pins and I don't feel like resoldering everything.
 void corrupt_cart_wram(bool wram_data_button_status, bool wram_addr_button_status, bool cart_data_button_status, bool cart_addr_button_status)
 {
+  //Check to see if a button is pressed, flash the corresponding status LED, and use corrupt_line(int port) to perform the corruption.
   if(wram_data_button_status)
   {
     digitalWrite(wram_data_led, HIGH);
     corrupt_line(2);
-    Serial.println("Wram Data Button Pressed");
+    delay(wram_cart_corrupt_delay);
     digitalWrite(wram_data_led, LOW);
   }
 
@@ -189,7 +102,7 @@ void corrupt_cart_wram(bool wram_data_button_status, bool wram_addr_button_statu
   {
     digitalWrite(wram_addr_led, HIGH);
     corrupt_line(1);
-    Serial.println("Wram Address Button Pressed");
+    delay(wram_cart_corrupt_delay);
     digitalWrite(wram_addr_led, LOW);
   }
 
@@ -197,7 +110,7 @@ void corrupt_cart_wram(bool wram_data_button_status, bool wram_addr_button_statu
   {
     digitalWrite(cart_data_led, HIGH);
     corrupt_line(3);
-    Serial.println("Cart Data Button Pressed");
+    delay(wram_cart_corrupt_delay);
     digitalWrite(cart_data_led, LOW);
   }
 
@@ -205,15 +118,27 @@ void corrupt_cart_wram(bool wram_data_button_status, bool wram_addr_button_statu
   {
     digitalWrite(cart_addr_led, HIGH);
     corrupt_line(0);
-    Serial.println("Cart Address Button Pressed");
+    delay(wram_cart_corrupt_delay);
     digitalWrite(cart_addr_led, LOW);
   }
 }
 
+//This function actually does the corrupting on the WRAM and Cartridge busses. Instead of using more conventional functions like digitalWrite() I had
+//to implement this by setting registers and writing some basic assembly code. This is due to timing issues with the Arduino and the SGB. The SGB
+//runs at about 4 Mhz and the Arduino runs at about 16 Mhz. If corruptions are performed for longer than 1 CPU cycle on the SGB, it is very likely
+//to cause an instant crash. Functions like digitalWrite() take about 50 Arduino cycles to complete, which means that the corruption will be active for
+//about 12 SGB cycles. Setting a port register only takes about 2 Arduino cycles. Combining this with some nops written in assmbly allows the Arduino
+//to perform corruptions must faster and minimize crashes.
 void corrupt_line(int port)
 {
-  SET(PORTB, port);  
+  //Set the port register to high. This basically does the same thing as digitalWrite(pin, HIGH)
+  SET(PORTB, port);
+  
+  //Since there aren't functions to delay for nanoseconds, just tell the Arduino to wait for 5 CPU cycles. I found that waiting for 5 cycles produced
+  //the best corruptions
   __asm__("nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t");
+
+  //Set the port register to low. This basically does the same thing as digitalWrite(pin, LOW)
   CLR(PORTB, port);
 }
 
