@@ -33,7 +33,7 @@
 #define vram_data_pot 1
 
 //Define how long in milleseconds to wait between WRAM and Cart corruptions
-#define wram_cart_corrupt_delay 15
+#define wram_cart_corrupt_delay 75
 
 void setup() {
   //Set shift register output pins
@@ -64,7 +64,7 @@ void loop() {
 //Communicate with the shift registers to pull the various VRAM bus lines low
 void corrupt_vram(int addr_pot, int data_pot){
   
-  //Read the data from the address and data potentiometers and convert the reading to a number between 0 and 127. 
+  //Read the data from the address and data potentiometers and convert the reading to a number between 0 and 1
   //When this byte is written to the shift registers, it will pull the corresponding VRAM bus lines to low.
   int rand_addr = (addr_pot/8);
   int rand_data = (data_pot/8);
